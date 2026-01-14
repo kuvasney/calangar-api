@@ -1,4 +1,5 @@
 import 'dotenv/config';
-declare const app: import("express-serve-static-core").Express;
+import { type Express } from 'express';
+declare const app: Express;
 export default app;
 //# sourceMappingURL=app.d.ts.map

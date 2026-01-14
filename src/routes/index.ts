@@ -1,11 +1,11 @@
-import { Router } from "express";
+import { Router, type Router as ExpressRouter } from "express";
 import authRoutes from "./auth.routes.js";
 import productRoutes from "./product.routes.js";
 import projectRoutes from "./project.routes.js";
 import { authMiddleware } from "../middlewares/auth.middleware.js";
 import { userService } from "../services/user.service.js";
 
-const router = Router();
+const router: ExpressRouter = Router();
 
 // Rota de teste (pública)
 router.get("/health", (req, res) => {

@@ -1,6 +1,6 @@
 // api/src/app.ts
 import 'dotenv/config';
-import express from 'express';
+import express, {} from 'express';
 import session from 'express-session';
 import cors from 'cors';
 import passport from './auth/strategies/google.strategy.js';

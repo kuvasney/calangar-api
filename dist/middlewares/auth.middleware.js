@@ -1,21 +1,21 @@
-import { jwtService } from '../services/jwt.service.js';
+import { jwtService } from "../services/jwt.service.js";
 export const authMiddleware = (req, res, next) => {
     try {
         // Extrair token do header Authorization
         const authHeader = req.headers.authorization;
         if (!authHeader) {
-            res.status(401).json({ error: 'Authorization header not provided' });
+            res.status(401).json({ error: "Authorization header not provided" });
             return;
         }
         // Verificar formato: "Bearer token"
-        const parts = authHeader.split(' ');
-        if (parts.length !== 2 || parts[0] !== 'Bearer') {
-            res.status(401).json({ error: 'Invalid authorization header format' });
+        const parts = authHeader.split(" ");
+        if (parts.length !== 2 || parts[0] !== "Bearer") {
+            res.status(401).json({ error: "Invalid authorization header format" });
             return;
         }
         const token = parts[1];
         if (!token) {
-            res.status(401).json({ error: 'Token not provided' });
+            res.status(401).json({ error: "Token not provided" });
             return;
         }
         // Verificar e decodificar token
@@ -30,8 +30,8 @@ export const authMiddleware = (req, res, next) => {
     }
     catch (error) {
         res.status(401).json({
-            error: 'Invalid or expired token',
-            message: error instanceof Error ? error.message : 'Authentication failed'
+            error: "Invalid or expired token",
+            message: error instanceof Error ? error.message : "Authentication failed",
         });
     }
 };

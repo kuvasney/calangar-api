@@ -1,8 +1,8 @@
-import { Router } from "express";
+import { Router, type Router as ExpressRouter } from "express";
 import { projectController } from "../controllers/project.controller.js";
 import { authMiddleware } from "../middlewares/auth.middleware.js";
 
-const router = Router();
+const router: ExpressRouter = Router();
 
 // Rota para criar um novo projeto (protegida)
 router.post("/", authMiddleware, (req, res) =>

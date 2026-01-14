@@ -1,8 +1,8 @@
-import { Router } from "express";
+import { Router, type Router as ExpressRouter } from "express";
 import { productController } from "../controllers/product.controller.js";
 import { authMiddleware } from "../middlewares/auth.middleware.js";
 
-const router = Router();
+const router: ExpressRouter = Router();
 
 // Rota para criar um novo produto (protegida)
 router.post("/", authMiddleware, (req, res) =>
