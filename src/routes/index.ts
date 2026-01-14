@@ -1,6 +1,7 @@
 import { Router } from "express";
 import authRoutes from "./auth.routes.js";
 import productRoutes from "./product.routes.js";
+import projectRoutes from "./project.routes.js";
 import { authMiddleware } from "../middlewares/auth.middleware.js";
 import { userService } from "../services/user.service.js";
 
@@ -16,6 +17,9 @@ router.use("/auth", authRoutes);
 
 // Rotas de produtos (protegidas)
 router.use("/products", productRoutes);
+
+// Rotas de projetos (protegidas)
+router.use("/projects", projectRoutes);
 
 // Rota protegida de teste - Retorna dados do usuário autenticado
 router.get("/me", authMiddleware, async (req, res) => {

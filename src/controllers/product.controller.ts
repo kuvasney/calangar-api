@@ -33,6 +33,48 @@ class ProductController {
     }
   }
 
+  /**
+   * Editar um produto
+   * PUT /api/products/:id
+   */
+  async update(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+      const { description, value, steps } = req.body;
+
+      // req.user vem do authMiddleware
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      // Validações básicas
+      if (!id || !value || !steps) {
+        return res.status(400).json({
+          error: "id, value and steps are required",
+        });
+      }
+
+      // Atualizar produto
+      const product = await productService.update({
+        id: Number(id),
+        userId: req.user.userId,
+        description,
+        value,
+        steps,
+      });
+
+      res.status(200).json({ product });
+    } catch (error: any) {
+      console.error("Error updating product:", error);
+
+      if (error.message === "Produto não encontrado ou sem permissão") {
+        return res.status(404).json({ error: error.message });
+      }
+
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+
   async getAllProducts(req: Request, res: Response) {
     try {
       // req.user vem do authMiddleware
@@ -44,6 +86,37 @@ class ProductController {
       res.json(products);
     } catch (error) {
       console.error("Error fetching products:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+
+  /**
+   * Deletar um produto
+   * DELETE /api/products/:id
+   */
+  async delete(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+
+      // req.user vem do authMiddleware
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      if (!id) {
+        return res.status(400).json({ error: "id is required" });
+      }
+
+      const result = await productService.delete(Number(id), req.user.userId);
+
+      res.status(200).json(result);
+    } catch (error: any) {
+      console.error("Error deleting product:", error);
+
+      if (error.message === "Produto não encontrado ou sem permissão") {
+        return res.status(404).json({ error: error.message });
+      }
+
       res.status(500).json({ error: "Internal server error" });
     }
   }

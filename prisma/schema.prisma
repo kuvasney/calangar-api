@@ -14,10 +14,11 @@ model User {
   id        String    @id @default(uuid())
   email     String    @unique
   name      String
-  password  String?   // Opcional: usuários do Google não têm senha
+  password  String? // Opcional: usuários do Google não têm senha
   avatar    String?
   googleId  String?   @unique @map("google_id")
   products  Product[] // Relação: usuário tem vários produtos
+  projects  Project[] // Relação: usuário tem vários projetos
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
 
@@ -30,6 +31,7 @@ model Product {
   description String
   value       String
   steps       ProductStep[]
+  projects    Project[]     // Relação reversa necessária para o Prisma (não será usada no código)
   createdAt   DateTime      @default(now()) @map("created_at")
   updatedAt   DateTime      @updatedAt @map("updated_at")
 
@@ -39,15 +41,54 @@ model Product {
 }
 
 model ProductStep {
-  id        Int      @id @default(autoincrement())
-  productId Int      @map("product_id")
+  id        Int                     @id @default(autoincrement())
+  productId Int                     @map("product_id")
   name      String
   days      Int
   order     Int
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  schedules ProjectStepSchedule[]
+  createdAt DateTime                @default(now()) @map("created_at")
+  updatedAt DateTime                @updatedAt @map("updated_at")
 
   product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
 
   @@map("product_steps")
+}
+
+model Project {
+  id            Int                     @id @default(autoincrement())
+  userId        String                  @map("user_id")
+  projectName   String                  @map("project_name")
+  clientName    String                  @map("client_name")
+  clientAddress Json                    @map("client_address") // { street, neighborhood, city, state, zipCode, number, complement }
+  obraAddress   Json                    @map("obra_address") // { street, neighborhood, city, state, zipCode, number, complement }
+  productId     Int                     @map("product_id")     // Relação com Product (obrigatório)
+  startDate     DateTime                @map("start_date")
+  status        String
+  schedules     ProjectStepSchedule[]
+  createdAt     DateTime                @default(now()) @map("created_at")
+  updatedAt     DateTime                @updatedAt @map("updated_at")
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  product Product @relation(fields: [productId], references: [id], onDelete: Restrict)
+
+  @@map("projects")
+}
+
+model ProjectStepSchedule {
+  id               Int       @id @default(autoincrement())
+  projectId        Int       @map("project_id")
+  productStepId    Int       @map("product_step_id")
+  plannedStartDate DateTime  @map("planned_start_date")
+  plannedEndDate   DateTime  @map("planned_end_date")
+  actualStartDate  DateTime? @map("actual_start_date")
+  actualEndDate    DateTime? @map("actual_end_date")
+  status           String    @default("pending") // "pending" | "in_progress" | "completed"
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  project     Project     @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  productStep ProductStep @relation(fields: [productStepId], references: [id], onDelete: Restrict)
+
+  @@map("project_step_schedules")
 }
