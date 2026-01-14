@@ -1,55 +1,47 @@
-import { Router } from 'express';
-import passport from '../auth/strategies/google.strategy.js';
-import { jwtService } from '../services/jwt.service.js';
+import { Router } from "express";
+import passport from "../auth/strategies/google.strategy.js";
+import { authController } from "../controllers/auth.controller.js";
 const router = Router();
-// Rota para iniciar autenticação com Google
-router.get('/google', passport.authenticate('google', {
-    scope: ['profile', 'email'],
+// ========== Autenticação tradicional (Email/Senha) ==========
+/**
+ * Registrar novo usuário
+ * POST /api/auth/register
+ * Body: { email, name, password }
+ */
+router.post("/register", (req, res) => authController.register(req, res));
+/**
+ * Login com email e senha
+ * POST /api/auth/login
+ * Body: { email, password }
+ */
+router.post("/login", (req, res) => authController.login(req, res));
+// ========== OAuth Google ==========
+/**
+ * Iniciar autenticação com Google
+ * GET /api/auth/google
+ */
+router.get("/google", passport.authenticate("google", {
+    scope: ["profile", "email"],
 }));
-// Callback do Google OAuth
-router.get('/google/callback', passport.authenticate('google', {
+/**
+ * Callback do Google OAuth
+ * GET /api/auth/google/callback
+ */
+router.get("/google/callback", passport.authenticate("google", {
     failureRedirect: `${process.env.FRONTEND_URL}/?error=auth_failed`,
-    session: false, // Não manter sessão, vamos usar JWT
-}), (req, res) => {
-    // req.user é o User do Prisma vindo do passport
-    const authenticatedUser = req.user;
-    if (!authenticatedUser) {
-        return res.redirect(`${process.env.FRONTEND_URL}/login?error=no_user`);
-    }
-    // Gerar tokens JWT
-    const { accessToken, refreshToken } = jwtService.generateTokenPair({
-        userId: authenticatedUser.id,
-        email: authenticatedUser.email,
-    });
-    // Redirecionar para o frontend com tokens
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:5173';
-    res.redirect(`${frontendUrl}/auth/callback?accessToken=${accessToken}&refreshToken=${refreshToken}`);
-});
-// Refresh token - Gerar novo access token
-router.post('/refresh-token', (req, res) => {
-    try {
-        const { refreshToken } = req.body;
-        if (!refreshToken) {
-            return res.status(400).json({ error: 'Refresh token is required' });
-        }
-        // Verificar refresh token
-        const decoded = jwtService.verifyRefreshToken(refreshToken);
-        // Gerar novo access token
-        const newAccessToken = jwtService.generateAccessToken({
-            userId: decoded.userId,
-            email: decoded.email,
-        });
-        res.json({ accessToken: newAccessToken });
-    }
-    catch (error) {
-        res.status(401).json({ error: 'Invalid or expired refresh token' });
-    }
-});
-// Logout (opcional - apenas limpa do lado do cliente)
-router.post('/logout', (req, res) => {
-    req.logout(() => {
-        res.json({ message: 'Logged out successfully' });
-    });
-});
+    session: false,
+}), (req, res) => authController.googleCallback(req, res));
+// ========== Token Management ==========
+/**
+ * Renovar access token
+ * POST /api/auth/refresh-token
+ * Body: { refreshToken }
+ */
+router.post("/refresh-token", (req, res) => authController.refreshToken(req, res));
+/**
+ * Logout
+ * POST /api/auth/logout
+ */
+router.post("/logout", (req, res) => authController.logout(req, res));
 export default router;
 //# sourceMappingURL=auth.routes.js.map
