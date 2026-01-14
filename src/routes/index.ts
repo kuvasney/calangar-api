@@ -28,7 +28,7 @@ router.get("/me", authMiddleware, async (req, res) => {
       return res.status(401).json({ error: "Unauthorized" });
     }
 
-    const user = await userService.findById(req.user.userId);
+    const user = await userService.findById(req.user.userId!);
 
     if (!user) {
       return res.status(404).json({ error: "User not found" });

@@ -63,7 +63,7 @@ class ProjectController {
         return res.status(401).json({ error: "Unauthorized" });
       }
 
-      const projects = await projectService.findByUserId(req.user.userId);
+      const projects = await projectService.findByUserId(req.user.userId!);
       res.json(projects);
     } catch (error) {
       console.error("Error fetching projects:", error);
@@ -83,7 +83,10 @@ class ProjectController {
         return res.status(400).json({ error: "Invalid project ID" });
       }
 
-      const project = await projectService.findById(projectId, req.user.userId);
+      const project = await projectService.findById(
+        projectId,
+        req.user.userId!
+      );
       res.json(project);
     } catch (error) {
       console.error("Error fetching project:", error);
@@ -126,7 +129,7 @@ class ProjectController {
 
       const updatedProject = await projectService.update(
         projectId,
-        req.user.userId,
+        req.user.userId!,
         { projectName, clientName, clientAddress, obraAddress, status }
       );
 

@@ -57,7 +57,7 @@ class ProductController {
       // Atualizar produto
       const product = await productService.update({
         id: Number(id),
-        userId: req.user.userId,
+        userId: req.user.userId!,
         description,
         value,
         steps,
@@ -82,7 +82,7 @@ class ProductController {
         return res.status(401).json({ error: "Unauthorized" });
       }
 
-      const products = await productService.findByUserId(req.user.userId);
+      const products = await productService.findByUserId(req.user.userId!);
       res.json(products);
     } catch (error) {
       console.error("Error fetching products:", error);
@@ -107,7 +107,7 @@ class ProductController {
         return res.status(400).json({ error: "id is required" });
       }
 
-      const result = await productService.delete(Number(id), req.user.userId);
+      const result = await productService.delete(Number(id), req.user.userId!);
 
       res.status(200).json(result);
     } catch (error: any) {
