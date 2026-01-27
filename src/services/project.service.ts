@@ -367,43 +367,23 @@ export const projectService = {
       data: updateData,
     });
 
-    // 3. Recalcular etapas seguintes se a etapa foi concluída
-    if (status === "completed") {
-      const completedSchedule = await prisma.projectStepSchedule.findUnique({
-        where: { id: scheduleId },
-        include: { productStep: true },
+    // 3. Recarregar todas as etapas do projeto após o update
+    const allSchedules = await prisma.projectStepSchedule.findMany({
+      where: { projectId },
+    });
+
+    // 4. Verificar se todas as etapas estão concluídas
+    const openedSchedules = allSchedules.filter(
+      (o) => o.actualEndDate === null,
+    );
+
+    if (openedSchedules.length < 1) {
+      await prisma.project.update({
+        where: { id: projectId },
+        data: {
+          status: "completed",
+        },
       });
-
-      if (!completedSchedule) return;
-
-      // Pegar todas as etapas seguintes (order > atual)
-      const nextSchedules = schedule.project.schedules.filter(
-        (s) => s.productStep.order > completedSchedule.productStep.order,
-      );
-
-      // Calcular diferença entre data planejada e data real
-      const actualEnd = completedSchedule.actualEndDate || new Date();
-      const plannedEnd = completedSchedule.plannedEndDate;
-      const diffDays = Math.floor(
-        (actualEnd.getTime() - plannedEnd.getTime()) / (1000 * 60 * 60 * 24),
-      );
-
-      // Atualizar datas das etapas seguintes
-      for (const nextSchedule of nextSchedules) {
-        const newPlannedStart = new Date(nextSchedule.plannedStartDate);
-        newPlannedStart.setDate(newPlannedStart.getDate() + diffDays);
-
-        const newPlannedEnd = new Date(nextSchedule.plannedEndDate);
-        newPlannedEnd.setDate(newPlannedEnd.getDate() + diffDays);
-
-        await prisma.projectStepSchedule.update({
-          where: { id: nextSchedule.id },
-          data: {
-            plannedStartDate: newPlannedStart,
-            plannedEndDate: newPlannedEnd,
-          },
-        });
-      }
     }
 
     // 4. Retornar projeto atualizado
