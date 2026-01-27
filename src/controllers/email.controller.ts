@@ -1,9 +1,7 @@
 import { userService } from "../services/user.service.js";
-import { prisma } from "../config/prisma.js";
 import { PasswordServices } from "../services/password.services.js";
 import { SendPasswordResetEmail } from "../services/email.service.js";
 import type { Request, Response, NextFunction } from "express";
-import type { UserService } from "../models/User.model.js";
 
 class EmailController {
   async requestPasswordReset(
