@@ -82,18 +82,26 @@ class ProjectController {
             if (isNaN(projectId)) {
                 return res.status(400).json({ error: "Invalid project ID" });
             }
-            const { projectName, clientName, clientAddress, obraAddress, status } = req.body;
+            const { projectName, clientName, clientAddress, obraAddress, status, startDate, } = req.body;
             // Verificar se há pelo menos um campo para atualizar
             if (!projectName &&
                 !clientName &&
                 !clientAddress &&
                 !obraAddress &&
-                !status) {
+                !status &&
+                !startDate) {
                 return res.status(400).json({
-                    error: "At least one field must be provided: projectName, clientName, clientAddress, obraAddress, status",
+                    error: "At least one field must be provided: projectName, clientName, clientAddress, obraAddress, status, startDate",
                 });
             }
-            const updatedProject = await projectService.update(projectId, req.user.userId, { projectName, clientName, clientAddress, obraAddress, status });
+            const updatedProject = await projectService.update(projectId, req.user.userId, {
+                projectName,
+                clientName,
+                clientAddress,
+                obraAddress,
+                status,
+                startDate,
+            });
             res.json(updatedProject);
         }
         catch (error) {

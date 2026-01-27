@@ -21,6 +21,7 @@ model User {
   projects  Project[] // Relação: usuário tem vários projetos
   createdAt DateTime  @default(now()) @map("created_at")
   updatedAt DateTime  @updatedAt @map("updated_at")
+  passwordResetTokens PasswordResetToken[] 
 
   @@map("users")
 }
@@ -91,4 +92,12 @@ model ProjectStepSchedule {
   productStep ProductStep @relation(fields: [productStepId], references: [id], onDelete: Restrict)
 
   @@map("project_step_schedules")
+}
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  token     String   @unique
+  user      User     @relation(fields: [userId], references: [id])
+  userId    String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
 }

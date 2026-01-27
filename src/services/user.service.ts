@@ -1,14 +1,8 @@
-import { prisma } from '../config/prisma.js';
-import type { User } from '@prisma/client';
-import bcrypt from 'bcrypt';
+import { prisma } from "../config/prisma.js";
+import type { User } from "@prisma/client";
+import type { IUser } from "../types/user.js";
 
-interface CreateUserData {
-  email: string;
-  name: string;
-  password?: string;
-  avatar?: string;
-  googleId?: string;
-}
+import bcrypt from "bcrypt";
 
 export const userService = {
   // Buscar usuário por email
@@ -33,7 +27,7 @@ export const userService = {
   },
 
   // Criar novo usuário
-  async create(data: CreateUserData): Promise<User> {
+  async create(data: IUser): Promise<User> {
     const userData: any = {
       email: data.email,
       name: data.name,
@@ -58,9 +52,9 @@ export const userService = {
   },
 
   // Atualizar usuário
-  async update(id: string, data: Partial<CreateUserData>): Promise<User> {
+  async update(id: string, data: Partial<IUser>): Promise<User> {
     const updateData: any = { ...data };
-    
+
     // Se estiver atualizando senha, fazer hash
     if (data.password) {
       updateData.password = await bcrypt.hash(data.password, 10);

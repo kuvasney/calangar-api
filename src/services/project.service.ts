@@ -18,6 +18,7 @@ interface UpdateProjectData {
   clientAddress?: Address;
   obraAddress?: Address;
   status?: projectStatus;
+  startDate?: string;
 }
 
 type projectStatus = "planned" | "in_progress" | "completed";
@@ -147,7 +148,7 @@ export const projectService = {
     return project;
   },
 
-  // Atualizar campos simples do projeto (exceto productId e startDate que são imutáveis)
+  // Atualizar campos simples do projeto (exceto productId)
   async update(projectId: number, userId: string, data: UpdateProjectData) {
     // 1. Validar que o projeto existe e pertence ao usuário
     const existingProject = await prisma.project.findFirst({
@@ -200,6 +201,17 @@ export const projectService = {
       updateData.status = data.status;
     }
 
+    if (data.startDate !== undefined) {
+      // Garantir que a data seja interpretada como meio-dia UTC para evitar problemas de timezone
+      const dateStr =
+        typeof data.startDate === "string"
+          ? data.startDate.includes("T")
+            ? data.startDate
+            : `${data.startDate}T12:00:00.000Z`
+          : data.startDate;
+      updateData.startDate = new Date(dateStr);
+    }
+
     // 3. Atualizar projeto
     const updatedProject = await prisma.project.update({
       where: { id: projectId },
@@ -229,6 +241,75 @@ export const projectService = {
       },
     });
 
+    // 4. Se startDate foi alterado, recalcular todos os schedules pendentes
+    if (data.startDate !== undefined) {
+      const product = await prisma.product.findUnique({
+        where: { id: existingProject.productId },
+        include: {
+          steps: {
+            orderBy: { order: "asc" },
+          },
+        },
+      });
+
+      if (product) {
+        let currentDate = new Date(data.startDate);
+
+        // Recalcular apenas schedules que ainda não foram iniciados
+        for (const step of product.steps) {
+          const schedule = updatedProject.schedules.find(
+            (s) => s.productStepId === step.id,
+          );
+
+          if (schedule && !schedule.actualStartDate) {
+            const endDate = new Date(currentDate);
+            endDate.setDate(currentDate.getDate() + step.days);
+
+            await prisma.projectStepSchedule.update({
+              where: { id: schedule.id },
+              data: {
+                plannedStartDate: new Date(currentDate),
+                plannedEndDate: endDate,
+              },
+            });
+
+            currentDate = endDate;
+          } else if (schedule?.actualEndDate) {
+            // Se a etapa já foi concluída, usar a data real como base
+            currentDate = new Date(schedule.actualEndDate);
+          }
+        }
+
+        // Recarregar o projeto com schedules atualizados
+        return (await prisma.project.findUnique({
+          where: { id: projectId },
+          include: {
+            user: {
+              select: {
+                id: true,
+                name: true,
+                email: true,
+                avatar: true,
+              },
+            },
+            product: {
+              include: {
+                steps: true,
+              },
+            },
+            schedules: {
+              include: {
+                productStep: true,
+              },
+              orderBy: {
+                plannedStartDate: "asc",
+              },
+            },
+          },
+        })) as any;
+      }
+    }
+
     return updatedProject;
   },
 
@@ -237,7 +318,7 @@ export const projectService = {
     projectId: number,
     scheduleId: number,
     status: "in_progress" | "completed",
-    actualDate?: string
+    actualDate?: string,
   ) {
     // 1. Buscar o schedule
     const schedule = await prisma.projectStepSchedule.findFirst({
@@ -297,14 +378,14 @@ export const projectService = {
 
       // Pegar todas as etapas seguintes (order > atual)
       const nextSchedules = schedule.project.schedules.filter(
-        (s) => s.productStep.order > completedSchedule.productStep.order
+        (s) => s.productStep.order > completedSchedule.productStep.order,
       );
 
       // Calcular diferença entre data planejada e data real
       const actualEnd = completedSchedule.actualEndDate || new Date();
       const plannedEnd = completedSchedule.plannedEndDate;
       const diffDays = Math.floor(
-        (actualEnd.getTime() - plannedEnd.getTime()) / (1000 * 60 * 60 * 24)
+        (actualEnd.getTime() - plannedEnd.getTime()) / (1000 * 60 * 60 * 24),
       );
 
       // Atualizar datas das etapas seguintes
@@ -491,27 +572,27 @@ export const projectService = {
   //   });
   // },
 
-  // // Deletar produto
-  // async delete(id: number, userId: string) {
-  //   // Verificar se o produto existe e pertence ao usuário
-  //   const existingProject = await prisma.project.findFirst({
-  //     where: {
-  //       id,
-  //       userId,
-  //     },
-  //   });
+  // Deletar projeto
+  async delete(id: number, userId: string) {
+    // Verificar se o projeto existe e pertence ao usuário
+    const existingProject = await prisma.project.findFirst({
+      where: {
+        id,
+        userId,
+      },
+    });
 
-  //   if (!existingProject) {
-  //     throw new Error("Produto não encontrado ou sem permissão");
-  //   }
+    if (!existingProject) {
+      throw new Error("Projeto não encontrado ou sem permissão");
+    }
 
-  //   // Deletar produto (cascade vai deletar as steps automaticamente)
-  //   await prisma.project.delete({
-  //     where: {
-  //       id,
-  //     },
-  //   });
+    // Deletar projeto (cascade vai deletar as steps automaticamente)
+    await prisma.project.delete({
+      where: {
+        id,
+      },
+    });
 
-  //   return { message: "Produto deletado com sucesso" };
-  // },
+    return { message: "Projeto deletado com sucesso" };
+  },
 };

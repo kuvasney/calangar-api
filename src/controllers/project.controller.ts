@@ -85,7 +85,7 @@ class ProjectController {
 
       const project = await projectService.findById(
         projectId,
-        req.user.userId!
+        req.user.userId!,
       );
       res.json(project);
     } catch (error) {
@@ -110,8 +110,14 @@ class ProjectController {
         return res.status(400).json({ error: "Invalid project ID" });
       }
 
-      const { projectName, clientName, clientAddress, obraAddress, status } =
-        req.body;
+      const {
+        projectName,
+        clientName,
+        clientAddress,
+        obraAddress,
+        status,
+        startDate,
+      } = req.body;
 
       // Verificar se há pelo menos um campo para atualizar
       if (
@@ -119,18 +125,26 @@ class ProjectController {
         !clientName &&
         !clientAddress &&
         !obraAddress &&
-        !status
+        !status &&
+        !startDate
       ) {
         return res.status(400).json({
           error:
-            "At least one field must be provided: projectName, clientName, clientAddress, obraAddress, status",
+            "At least one field must be provided: projectName, clientName, clientAddress, obraAddress, status, startDate",
         });
       }
 
       const updatedProject = await projectService.update(
         projectId,
         req.user.userId!,
-        { projectName, clientName, clientAddress, obraAddress, status }
+        {
+          projectName,
+          clientName,
+          clientAddress,
+          obraAddress,
+          status,
+          startDate,
+        },
       );
 
       res.json(updatedProject);
@@ -171,7 +185,7 @@ class ProjectController {
         projectId,
         scheduleId,
         status,
-        actualDate
+        actualDate,
       );
 
       res.json(updatedProject);
@@ -182,6 +196,33 @@ class ProjectController {
       } else {
         res.status(500).json({ error: "Internal server error" });
       }
+    }
+  }
+
+  async delete(req: Request, res: Response) {
+    try {
+      const { id } = req.params;
+
+      // req.user vem do authMiddleware
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      if (!id) {
+        return res.status(400).json({ error: "id is required" });
+      }
+
+      const result = await projectService.delete(Number(id), req.user.userId!);
+
+      res.status(200).json(result);
+    } catch (error: any) {
+      console.error("Error deleting project:", error);
+
+      if (error.message === "Projeto não encontrado ou sem permissão") {
+        return res.status(404).json({ error: error.message });
+      }
+
+      res.status(500).json({ error: "Internal server error" });
     }
   }
 }

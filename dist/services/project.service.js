@@ -84,7 +84,7 @@ export const projectService = {
         });
         return project;
     },
-    // Atualizar campos simples do projeto (exceto productId e startDate que são imutáveis)
+    // Atualizar campos simples do projeto (exceto productId)
     async update(projectId, userId, data) {
         // 1. Validar que o projeto existe e pertence ao usuário
         const existingProject = await prisma.project.findFirst({
@@ -129,6 +129,15 @@ export const projectService = {
         if (data.status !== undefined) {
             updateData.status = data.status;
         }
+        if (data.startDate !== undefined) {
+            // Garantir que a data seja interpretada como meio-dia UTC para evitar problemas de timezone
+            const dateStr = typeof data.startDate === 'string'
+                ? data.startDate.includes('T')
+                    ? data.startDate
+                    : `${data.startDate}T12:00:00.000Z`
+                : data.startDate;
+            updateData.startDate = new Date(dateStr);
+        }
         // 3. Atualizar projeto
         const updatedProject = await prisma.project.update({
             where: { id: projectId },
@@ -157,6 +166,67 @@ export const projectService = {
                 },
             },
         });
+        // 4. Se startDate foi alterado, recalcular todos os schedules pendentes
+        if (data.startDate !== undefined) {
+            const product = await prisma.product.findUnique({
+                where: { id: existingProject.productId },
+                include: {
+                    steps: {
+                        orderBy: { order: "asc" },
+                    },
+                },
+            });
+            if (product) {
+                let currentDate = new Date(data.startDate);
+                // Recalcular apenas schedules que ainda não foram iniciados
+                for (const step of product.steps) {
+                    const schedule = updatedProject.schedules.find((s) => s.productStepId === step.id);
+                    if (schedule && !schedule.actualStartDate) {
+                        const endDate = new Date(currentDate);
+                        endDate.setDate(currentDate.getDate() + step.days);
+                        await prisma.projectStepSchedule.update({
+                            where: { id: schedule.id },
+                            data: {
+                                plannedStartDate: new Date(currentDate),
+                                plannedEndDate: endDate,
+                            },
+                        });
+                        currentDate = endDate;
+                    }
+                    else if (schedule?.actualEndDate) {
+                        // Se a etapa já foi concluída, usar a data real como base
+                        currentDate = new Date(schedule.actualEndDate);
+                    }
+                }
+                // Recarregar o projeto com schedules atualizados
+                return (await prisma.project.findUnique({
+                    where: { id: projectId },
+                    include: {
+                        user: {
+                            select: {
+                                id: true,
+                                name: true,
+                                email: true,
+                                avatar: true,
+                            },
+                        },
+                        product: {
+                            include: {
+                                steps: true,
+                            },
+                        },
+                        schedules: {
+                            include: {
+                                productStep: true,
+                            },
+                            orderBy: {
+                                plannedStartDate: "asc",
+                            },
+                        },
+                    },
+                }));
+            }
+        }
         return updatedProject;
     },
     // Atualizar status de uma etapa e recalcular cronograma

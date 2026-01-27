@@ -1,6 +1,8 @@
 import { Router, type Router as ExpressRouter } from "express";
 import passport from "../auth/strategies/google.strategy.js";
 import { authController } from "../controllers/auth.controller.js";
+import { emailController } from "../controllers/email.controller.js";
+import type { Request, Response, NextFunction } from "express";
 
 const router: ExpressRouter = Router();
 
@@ -20,6 +22,24 @@ router.post("/register", (req, res) => authController.register(req, res));
  */
 router.post("/login", (req, res) => authController.login(req, res));
 
+/**
+ * Email de recuperação de senha
+ * POST /api/auth/reset-password-email
+ * Body: { email }
+ */
+router.post("/reset-password-email", (req, res, next) =>
+  emailController.requestPasswordReset(req, res, next),
+);
+
+/**
+ * REset da senha por token
+ * POST /api/auth/reset-password
+ * Body: { token, password }
+ */
+router.post("/reset-password", (req, res, next) =>
+  emailController.resetPassword(req, res, next),
+);
+
 // ========== OAuth Google ==========
 
 /**
@@ -30,7 +50,7 @@ router.get(
   "/google",
   passport.authenticate("google", {
     scope: ["profile", "email"],
-  })
+  }),
 );
 
 /**
@@ -43,7 +63,7 @@ router.get(
     failureRedirect: `${process.env.FRONTEND_URL}/?error=auth_failed`,
     session: false,
   }),
-  (req, res) => authController.googleCallback(req, res)
+  (req, res) => authController.googleCallback(req, res),
 );
 
 // ========== Token Management ==========
@@ -54,7 +74,7 @@ router.get(
  * Body: { refreshToken }
  */
 router.post("/refresh-token", (req, res) =>
-  authController.refreshToken(req, res)
+  authController.refreshToken(req, res),
 );
 
 /**

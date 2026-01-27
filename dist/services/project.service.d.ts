@@ -14,6 +14,7 @@ interface UpdateProjectData {
     clientAddress?: Address;
     obraAddress?: Address;
     status?: projectStatus;
+    startDate?: string;
 }
 type projectStatus = "planned" | "in_progress" | "completed";
 interface Address {
@@ -90,66 +91,7 @@ export declare const projectService: {
         obraAddress: import("@prisma/client/runtime/library").JsonValue;
         startDate: Date;
     }>;
-    update(projectId: number, userId: string, data: UpdateProjectData): Promise<{
-        user: {
-            name: string;
-            id: string;
-            email: string;
-            avatar: string | null;
-        };
-        product: {
-            steps: {
-                name: string;
-                id: number;
-                createdAt: Date;
-                updatedAt: Date;
-                days: number;
-                order: number;
-                productId: number;
-            }[];
-        } & {
-            id: number;
-            createdAt: Date;
-            updatedAt: Date;
-            description: string;
-            value: string;
-            userId: string;
-        };
-        schedules: ({
-            productStep: {
-                name: string;
-                id: number;
-                createdAt: Date;
-                updatedAt: Date;
-                days: number;
-                order: number;
-                productId: number;
-            };
-        } & {
-            id: number;
-            createdAt: Date;
-            updatedAt: Date;
-            plannedStartDate: Date;
-            plannedEndDate: Date;
-            actualStartDate: Date | null;
-            actualEndDate: Date | null;
-            status: string;
-            projectId: number;
-            productStepId: number;
-        })[];
-    } & {
-        id: number;
-        createdAt: Date;
-        updatedAt: Date;
-        userId: string;
-        status: string;
-        productId: number;
-        projectName: string;
-        clientName: string;
-        clientAddress: import("@prisma/client/runtime/library").JsonValue;
-        obraAddress: import("@prisma/client/runtime/library").JsonValue;
-        startDate: Date;
-    }>;
+    update(projectId: number, userId: string, data: UpdateProjectData): Promise<any>;
     updateStepStatus(projectId: number, scheduleId: number, status: "in_progress" | "completed", actualDate?: string): Promise<({
         product: {
             steps: {
