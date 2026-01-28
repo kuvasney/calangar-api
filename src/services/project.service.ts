@@ -63,7 +63,7 @@ function calculateSchedule(startDate: Date, steps: ProductStep[]) {
   for (const step of sortedSteps) {
     const plannedStartDate = new Date(currentDate);
     const plannedEndDate = new Date(currentDate);
-    plannedEndDate.setDate(plannedEndDate.getDate() + step.days);
+    plannedEndDate.setDate(plannedEndDate.getDate() + step.days - 1);
 
     schedules.push({
       productStepId: step.id,
@@ -72,8 +72,9 @@ function calculateSchedule(startDate: Date, steps: ProductStep[]) {
       status: "pending",
     });
 
-    // Próxima etapa começa onde a anterior termina
+    // Próxima etapa começa no dia seguinte ao fim desta
     currentDate = new Date(plannedEndDate);
+    currentDate.setDate(currentDate.getDate() + 1);
   }
 
   return schedules;
@@ -93,7 +94,14 @@ export const projectService = {
     }
 
     // 2. Calcular cronograma baseado nas etapas
-    const startDate = new Date(data.startDate);
+    // Garantir que a data seja interpretada como meio-dia UTC para evitar problemas de timezone
+    const dateStr =
+      typeof data.startDate === "string"
+        ? data.startDate.includes("T")
+          ? data.startDate
+          : `${data.startDate}T12:00:00.000Z`
+        : data.startDate;
+    const startDate = new Date(dateStr);
     const schedules = calculateSchedule(startDate, product.steps);
 
     // 3. Criar projeto com os schedules
@@ -263,7 +271,7 @@ export const projectService = {
 
           if (schedule && !schedule.actualStartDate) {
             const endDate = new Date(currentDate);
-            endDate.setDate(currentDate.getDate() + step.days);
+            endDate.setDate(currentDate.getDate() + step.days - 1);
 
             await prisma.projectStepSchedule.update({
               where: { id: schedule.id },
@@ -273,10 +281,12 @@ export const projectService = {
               },
             });
 
-            currentDate = endDate;
+            currentDate = new Date(endDate);
+            currentDate.setDate(currentDate.getDate() + 1);
           } else if (schedule?.actualEndDate) {
             // Se a etapa já foi concluída, usar a data real como base
             currentDate = new Date(schedule.actualEndDate);
+            currentDate.setDate(currentDate.getDate() + 1);
           }
         }
 
