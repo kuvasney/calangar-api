@@ -175,9 +175,12 @@ class ProjectController {
 
       const { status, actualDate } = req.body;
 
-      if (!status || !["in_progress", "completed"].includes(status)) {
+      if (
+        !status ||
+        !["pending", "in_progress", "completed"].includes(status)
+      ) {
         return res.status(400).json({
-          error: 'Status must be "in_progress" or "completed"',
+          error: 'Status must be "pending", "in_progress" or "completed"',
         });
       }
 
