@@ -70,12 +70,12 @@ export const productService = {
       }
     }
 
-    // 3. Deletar etapas antigas
-    await prisma.productStep.deleteMany({
-      where: {
-        productId: data.id,
-      },
-    });
+    // // 3. Deletar etapas antigas
+    // await prisma.productStep.deleteMany({
+    //   where: {
+    //     productId: data.id,
+    //   },
+    // });
 
     // 4. Atualizar produto e criar novas etapas
     const updatedProduct = await prisma.product.update({
