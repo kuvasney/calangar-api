@@ -395,7 +395,57 @@ export const projectService = {
       data: updateData,
     });
 
-    // 2.1 Atualizar etapa seguinte automaticamente
+    // 2.1 Se uma etapa foi concluída com data MAIOR que o planejado,
+    // recalcular as datas de todas as próximas etapas
+    if (status === "completed") {
+      const completedSchedule = await prisma.projectStepSchedule.findUnique({
+        where: { id: scheduleId },
+      });
+
+      if (completedSchedule && completedSchedule.actualEndDate) {
+        // Calcular a diferença entre a data real de conclusão e a data planejada
+        const timeDiff =
+          completedSchedule.actualEndDate.getTime() -
+          completedSchedule.plannedEndDate.getTime();
+        const daysDiff = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
+
+        // Se a etapa ultrapassou o prazo, recalcular as próximas
+        if (daysDiff > 0) {
+          const allSchedules = schedule.project.schedules;
+          const currentIndex = allSchedules.findIndex(
+            (s) => s.id === scheduleId,
+          );
+
+          // Recalcular todas as etapas após a atual
+          for (let i = currentIndex + 1; i < allSchedules.length; i++) {
+            const nextSched = allSchedules[i];
+
+            if (!nextSched) continue;
+
+            // Se a etapa seguinte ainda não foi concluída, recalcular suas datas
+            if (!nextSched.actualEndDate) {
+              const newPlannedStartDate = new Date(nextSched.plannedStartDate);
+              const newPlannedEndDate = new Date(nextSched.plannedEndDate);
+
+              newPlannedStartDate.setDate(
+                newPlannedStartDate.getDate() + daysDiff,
+              );
+              newPlannedEndDate.setDate(newPlannedEndDate.getDate() + daysDiff);
+
+              await prisma.projectStepSchedule.update({
+                where: { id: nextSched.id },
+                data: {
+                  plannedStartDate: newPlannedStartDate,
+                  plannedEndDate: newPlannedEndDate,
+                },
+              });
+            }
+          }
+        }
+      }
+    }
+
+    // 2.3 Atualizar etapa seguinte automaticamente
     if (nextSchedule) {
       // Ao concluir uma etapa, próxima vira in_progress
       if (status === "completed" && nextSchedule.status !== "completed") {
