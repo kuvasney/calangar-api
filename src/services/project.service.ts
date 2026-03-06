@@ -81,6 +81,117 @@ function calculateSchedule(startDate: Date, steps: ProductStep[]) {
   return schedules;
 }
 
+const projectFullInclude = {
+  user: {
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      avatar: true,
+    },
+  },
+  product: {
+    include: {
+      steps: true,
+    },
+  },
+  schedules: {
+    include: {
+      productStep: true,
+    },
+    orderBy: {
+      plannedStartDate: "asc" as const,
+    },
+  },
+};
+
+function parseDateInput(date?: string) {
+  if (!date) return undefined;
+  const normalized = date.includes("T") ? date : `${date}T12:00:00.000Z`;
+  return new Date(normalized);
+}
+
+function addDays(baseDate: Date, days: number) {
+  const result = new Date(baseDate);
+  result.setDate(result.getDate() + days);
+  return result;
+}
+
+async function recalculateFollowingSchedules(
+  schedules: Array<{
+    id: number;
+    actualEndDate: Date | null;
+    plannedStartDate: Date;
+    plannedEndDate: Date;
+    productStep: { days: number };
+  }>,
+  currentIndex: number,
+  options: {
+    daysDiff: number;
+    referenceEndDate: Date;
+    updatePlannedEndDate: boolean;
+  },
+) {
+  const { daysDiff, referenceEndDate, updatePlannedEndDate } = options;
+
+  if (currentIndex < 0) return;
+
+  if (updatePlannedEndDate) {
+    let nextStartDate = addDays(referenceEndDate, 1);
+
+    for (let i = currentIndex + 1; i < schedules.length; i++) {
+      const nextSchedule = schedules[i];
+
+      if (!nextSchedule || nextSchedule.actualEndDate) {
+        continue;
+      }
+
+      const recalculatedPlannedStartDate = new Date(nextStartDate);
+      const recalculatedPlannedEndDate = addDays(
+        recalculatedPlannedStartDate,
+        nextSchedule.productStep.days - 1,
+      );
+
+      await prisma.projectStepSchedule.update({
+        where: { id: nextSchedule.id },
+        data: {
+          actualStartDate: recalculatedPlannedStartDate,
+          plannedStartDate: recalculatedPlannedStartDate,
+          plannedEndDate: recalculatedPlannedEndDate,
+        },
+      });
+
+      nextStartDate = addDays(recalculatedPlannedEndDate, 1);
+    }
+
+    return;
+  }
+
+  if (daysDiff === 0) {
+    return;
+  }
+
+  for (let i = currentIndex + 1; i < schedules.length; i++) {
+    const nextSchedule = schedules[i];
+
+    if (!nextSchedule || nextSchedule.actualEndDate) {
+      continue;
+    }
+
+    const shiftedActualStartDate = addDays(
+      nextSchedule.plannedStartDate,
+      daysDiff,
+    );
+
+    await prisma.projectStepSchedule.update({
+      where: { id: nextSchedule.id },
+      data: {
+        actualStartDate: shiftedActualStartDate,
+      },
+    });
+  }
+}
+
 export const projectService = {
   // Criar novo projeto
   async create(data: CreateProjectData) {
@@ -137,20 +248,7 @@ export const projectService = {
         },
       },
       include: {
-        user: true,
-        product: {
-          include: {
-            steps: true,
-          },
-        },
-        schedules: {
-          include: {
-            productStep: true,
-          },
-          orderBy: {
-            plannedStartDate: "asc",
-          },
-        },
+        ...projectFullInclude,
       },
     });
 
@@ -226,27 +324,7 @@ export const projectService = {
       where: { id: projectId },
       data: updateData,
       include: {
-        user: {
-          select: {
-            id: true,
-            name: true,
-            email: true,
-            avatar: true,
-          },
-        },
-        product: {
-          include: {
-            steps: true,
-          },
-        },
-        schedules: {
-          include: {
-            productStep: true,
-          },
-          orderBy: {
-            plannedStartDate: "asc",
-          },
-        },
+        ...projectFullInclude,
       },
     });
 
@@ -265,14 +343,13 @@ export const projectService = {
         // Usar a data já convertida corretamente em updateData
         let currentDate = new Date(updateData.startDate);
 
-        // Recalcular datas de etapas não concluídas
+        // Recalcular datas planejadas de todas as etapas conforme nova data inicial
         for (const step of product.steps) {
           const schedule = updatedProject.schedules.find(
             (s) => s.productStepId === step.id,
           );
 
-          if (schedule && !schedule.actualEndDate) {
-            // Etapa não concluída: recalcular datas planejadas
+          if (schedule) {
             const endDate = new Date(currentDate);
             endDate.setDate(currentDate.getDate() + step.days - 1);
 
@@ -286,40 +363,16 @@ export const projectService = {
 
             currentDate = new Date(endDate);
             currentDate.setDate(currentDate.getDate() + 1);
-          } else if (schedule?.actualEndDate) {
-            // Etapa já concluída: usar data real como base para próxima
-            currentDate = new Date(schedule.actualEndDate);
-            currentDate.setDate(currentDate.getDate() + 1);
           }
         }
 
         // Recarregar o projeto com schedules atualizados
-        return (await prisma.project.findUnique({
+        return await prisma.project.findUnique({
           where: { id: projectId },
           include: {
-            user: {
-              select: {
-                id: true,
-                name: true,
-                email: true,
-                avatar: true,
-              },
-            },
-            product: {
-              include: {
-                steps: true,
-              },
-            },
-            schedules: {
-              include: {
-                productStep: true,
-              },
-              orderBy: {
-                plannedStartDate: "asc",
-              },
-            },
+            ...projectFullInclude,
           },
-        })) as any;
+        });
       }
     }
 
@@ -329,15 +382,21 @@ export const projectService = {
   // Atualizar status de uma etapa e recalcular cronograma
   async updateStepStatus(
     projectId: number,
+    userId: string,
     scheduleId: number,
     status: "pending" | "in_progress" | "completed",
     actualDate?: string,
+    actualStartDate?: string,
+    actualEndDate?: string,
   ) {
     // 1. Buscar o schedule
     const schedule = await prisma.projectStepSchedule.findFirst({
       where: {
         id: scheduleId,
         projectId,
+        project: {
+          userId,
+        },
       },
       include: {
         project: {
@@ -370,11 +429,21 @@ export const projectService = {
 
     // 2. Atualizar status da etapa
     const updateData: any = { status };
+    const parsedActualDate = parseDateInput(actualDate);
+    const parsedActualStartDate = parseDateInput(actualStartDate);
+    const parsedActualEndDate = parseDateInput(actualEndDate);
 
-    if (status === "in_progress" && !schedule.actualStartDate) {
-      updateData.actualStartDate = actualDate
-        ? new Date(actualDate)
-        : new Date();
+    if (status === "pending") {
+      updateData.actualStartDate = null;
+      updateData.actualEndDate = null;
+    }
+
+    if (status === "in_progress") {
+      updateData.actualStartDate =
+        parsedActualStartDate ??
+        parsedActualDate ??
+        schedule.actualStartDate ??
+        new Date();
     }
 
     // Desfazer conclusão: ao voltar de completed para in_progress,
@@ -384,10 +453,12 @@ export const projectService = {
     }
 
     if (status === "completed") {
-      updateData.actualEndDate = actualDate ? new Date(actualDate) : new Date();
-      if (!schedule.actualStartDate) {
-        updateData.actualStartDate = schedule.plannedStartDate;
-      }
+      updateData.actualStartDate =
+        parsedActualStartDate ??
+        schedule.actualStartDate ??
+        schedule.plannedStartDate;
+      updateData.actualEndDate =
+        parsedActualEndDate ?? parsedActualDate ?? new Date();
     }
 
     await prisma.projectStepSchedule.update({
@@ -395,52 +466,66 @@ export const projectService = {
       data: updateData,
     });
 
-    // 2.1 Se uma etapa foi concluída com data MAIOR que o planejado,
-    // recalcular as datas de todas as próximas etapas
+    // 2.1 Recalcular etapas seguintes conforme regra de datas reais da etapa atual
     if (status === "completed") {
-      const completedSchedule = await prisma.projectStepSchedule.findUnique({
-        where: { id: scheduleId },
-      });
+      const completedActualEndDate =
+        updateData.actualEndDate ?? schedule.actualEndDate;
+      const completedActualStartDate =
+        updateData.actualStartDate ?? schedule.actualStartDate;
 
-      if (completedSchedule && completedSchedule.actualEndDate) {
-        // Calcular a diferença entre a data real de conclusão e a data planejada
-        const timeDiff =
-          completedSchedule.actualEndDate.getTime() -
-          completedSchedule.plannedEndDate.getTime();
-        const daysDiff = Math.ceil(timeDiff / (1000 * 60 * 60 * 24));
+      if (completedActualEndDate) {
+        const msInDay = 1000 * 60 * 60 * 24;
+        const daysDiff = Math.ceil(
+          (completedActualEndDate.getTime() -
+            schedule.plannedEndDate.getTime()) /
+            msInDay,
+        );
 
-        // Se a etapa ultrapassou o prazo, recalcular as próximas
+        const hasCustomStartDate =
+          Boolean(parsedActualStartDate) &&
+          Boolean(completedActualStartDate) &&
+          completedActualStartDate.getTime() !==
+            schedule.plannedStartDate.getTime();
+
+        const hasCustomEndDate =
+          Boolean(parsedActualEndDate) &&
+          completedActualEndDate.getTime() !==
+            schedule.plannedEndDate.getTime();
+
+        const currentIndex = schedule.project.schedules.findIndex(
+          (item) => item.id === scheduleId,
+        );
+
         if (daysDiff > 0) {
-          const allSchedules = schedule.project.schedules;
-          const currentIndex = allSchedules.findIndex(
-            (s) => s.id === scheduleId,
+          await recalculateFollowingSchedules(
+            schedule.project.schedules,
+            currentIndex,
+            {
+              daysDiff,
+              referenceEndDate: completedActualEndDate,
+              updatePlannedEndDate: true,
+            },
           );
-
-          // Recalcular todas as etapas após a atual
-          for (let i = currentIndex + 1; i < allSchedules.length; i++) {
-            const nextSched = allSchedules[i];
-
-            if (!nextSched) continue;
-
-            // Se a etapa seguinte ainda não foi concluída, recalcular suas datas
-            if (!nextSched.actualEndDate) {
-              const newPlannedStartDate = new Date(nextSched.plannedStartDate);
-              const newPlannedEndDate = new Date(nextSched.plannedEndDate);
-
-              newPlannedStartDate.setDate(
-                newPlannedStartDate.getDate() + daysDiff,
-              );
-              newPlannedEndDate.setDate(newPlannedEndDate.getDate() + daysDiff);
-
-              await prisma.projectStepSchedule.update({
-                where: { id: nextSched.id },
-                data: {
-                  plannedStartDate: newPlannedStartDate,
-                  plannedEndDate: newPlannedEndDate,
-                },
-              });
-            }
-          }
+        } else if (daysDiff < 0) {
+          await recalculateFollowingSchedules(
+            schedule.project.schedules,
+            currentIndex,
+            {
+              daysDiff,
+              referenceEndDate: completedActualEndDate,
+              updatePlannedEndDate: false,
+            },
+          );
+        } else if (hasCustomStartDate || hasCustomEndDate) {
+          await recalculateFollowingSchedules(
+            schedule.project.schedules,
+            currentIndex,
+            {
+              daysDiff: 0,
+              referenceEndDate: completedActualEndDate,
+              updatePlannedEndDate: true,
+            },
+          );
         }
       }
     }
@@ -501,19 +586,77 @@ export const projectService = {
     return await prisma.project.findUnique({
       where: { id: projectId },
       include: {
-        schedules: {
-          include: {
-            productStep: true,
-          },
-          orderBy: {
-            plannedStartDate: "asc",
-          },
-        },
-        product: {
-          include: {
-            steps: true,
-          },
-        },
+        ...projectFullInclude,
+      },
+    });
+  },
+
+  // Atualizar datas planejadas de uma etapa específica
+  async updateScheduleDates(
+    projectId: number,
+    scheduleId: number,
+    userId: string,
+    plannedStartDate?: string,
+    plannedEndDate?: string,
+  ) {
+    // 1. Verificar se o projeto pertence ao usuário
+    const project = await prisma.project.findFirst({
+      where: {
+        id: projectId,
+        userId,
+      },
+    });
+
+    if (!project) {
+      throw new Error("Projeto não encontrado ou sem permissão");
+    }
+
+    // 2. Verificar se o schedule pertence ao projeto
+    const schedule = await prisma.projectStepSchedule.findFirst({
+      where: {
+        id: scheduleId,
+        projectId,
+      },
+    });
+
+    if (!schedule) {
+      throw new Error("Etapa não encontrada");
+    }
+
+    // 3. Preparar dados para atualização
+    const updateData: any = {};
+
+    if (plannedStartDate !== undefined) {
+      const dateStr =
+        typeof plannedStartDate === "string"
+          ? plannedStartDate.includes("T")
+            ? plannedStartDate
+            : `${plannedStartDate}T12:00:00.000Z`
+          : plannedStartDate;
+      updateData.plannedStartDate = new Date(dateStr);
+    }
+
+    if (plannedEndDate !== undefined) {
+      const dateStr =
+        typeof plannedEndDate === "string"
+          ? plannedEndDate.includes("T")
+            ? plannedEndDate
+            : `${plannedEndDate}T12:00:00.000Z`
+          : plannedEndDate;
+      updateData.plannedEndDate = new Date(dateStr);
+    }
+
+    // 4. Atualizar o schedule
+    await prisma.projectStepSchedule.update({
+      where: { id: scheduleId },
+      data: updateData,
+    });
+
+    // 5. Retornar o projeto atualizado
+    return await prisma.project.findUnique({
+      where: { id: projectId },
+      include: {
+        ...projectFullInclude,
       },
     });
   },

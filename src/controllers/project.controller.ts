@@ -173,7 +173,7 @@ class ProjectController {
           .json({ error: "Invalid project ID or schedule ID" });
       }
 
-      const { status, actualDate } = req.body;
+      const { status, actualDate, actualStartDate, actualEndDate } = req.body;
 
       if (
         !status ||
@@ -186,9 +186,12 @@ class ProjectController {
 
       const updatedProject = await projectService.updateStepStatus(
         projectId,
+        req.user.userId!,
         scheduleId,
         status,
         actualDate,
+        actualStartDate,
+        actualEndDate,
       );
 
       res.json(updatedProject);
@@ -196,6 +199,54 @@ class ProjectController {
       console.error("Error updating step status:", error);
       if (error instanceof Error && error.message.includes("não encontrad")) {
         res.status(404).json({ error: error.message });
+      } else {
+        res.status(500).json({ error: "Internal server error" });
+      }
+    }
+  }
+
+  async updateScheduleDates(req: Request, res: Response) {
+    try {
+      if (!req.user) {
+        return res.status(401).json({ error: "Unauthorized" });
+      }
+
+      const projectId = parseInt(req.params.id!);
+      const scheduleId = parseInt(req.params.scheduleId!);
+
+      if (isNaN(projectId) || isNaN(scheduleId)) {
+        return res
+          .status(400)
+          .json({ error: "Invalid project ID or schedule ID" });
+      }
+
+      const { plannedStartDate, plannedEndDate } = req.body;
+
+      if (!plannedStartDate && !plannedEndDate) {
+        return res.status(400).json({
+          error:
+            "At least one date field (plannedStartDate or plannedEndDate) is required",
+        });
+      }
+
+      const updatedProject = await projectService.updateScheduleDates(
+        projectId,
+        scheduleId,
+        req.user.userId!,
+        plannedStartDate,
+        plannedEndDate,
+      );
+
+      res.json(updatedProject);
+    } catch (error) {
+      console.error("Error updating schedule dates:", error);
+      if (error instanceof Error && error.message.includes("não encontrad")) {
+        res.status(404).json({ error: error.message });
+      } else if (
+        error instanceof Error &&
+        error.message.includes("sem permissão")
+      ) {
+        res.status(403).json({ error: error.message });
       } else {
         res.status(500).json({ error: "Internal server error" });
       }

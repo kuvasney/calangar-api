@@ -31,6 +31,11 @@ router.patch("/:id/schedules/:scheduleId/status", authMiddleware, (req, res) =>
   projectController.updateStepStatus(req, res),
 );
 
+// Rota para atualizar datas planejadas de uma etapa (protegida)
+router.patch("/:id/schedules/:scheduleId/dates", authMiddleware, (req, res) =>
+  projectController.updateScheduleDates(req, res),
+);
+
 // Rota para deletar um projeto (protegida)
 router.delete("/:id", authMiddleware, (req, res) =>
   projectController.delete(req, res),
