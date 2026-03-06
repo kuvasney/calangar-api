@@ -60,7 +60,7 @@ function calculateSchedule(startDate: Date, steps: ProductStep[]) {
   // Ordenar steps pela ordem
   const sortedSteps = [...steps].sort((a, b) => a.order - b.order);
 
-  for (const step of sortedSteps) {
+  for (const [index, step] of sortedSteps.entries()) {
     const plannedStartDate = new Date(currentDate);
     const plannedEndDate = new Date(currentDate);
     plannedEndDate.setDate(plannedEndDate.getDate() + step.days - 1);
@@ -69,7 +69,8 @@ function calculateSchedule(startDate: Date, steps: ProductStep[]) {
       productStepId: step.id,
       plannedStartDate,
       plannedEndDate,
-      status: "pending",
+      status: index === 0 ? "in_progress" : "pending",
+      actualStartDate: index === 0 ? new Date(plannedStartDate) : null,
     });
 
     // Próxima etapa começa no dia seguinte ao fim desta
@@ -261,15 +262,17 @@ export const projectService = {
       });
 
       if (product) {
-        let currentDate = new Date(data.startDate);
+        // Usar a data já convertida corretamente em updateData
+        let currentDate = new Date(updateData.startDate);
 
-        // Recalcular apenas schedules que ainda não foram iniciados
+        // Recalcular datas de etapas não concluídas
         for (const step of product.steps) {
           const schedule = updatedProject.schedules.find(
             (s) => s.productStepId === step.id,
           );
 
-          if (schedule && !schedule.actualStartDate) {
+          if (schedule && !schedule.actualEndDate) {
+            // Etapa não concluída: recalcular datas planejadas
             const endDate = new Date(currentDate);
             endDate.setDate(currentDate.getDate() + step.days - 1);
 
@@ -284,7 +287,7 @@ export const projectService = {
             currentDate = new Date(endDate);
             currentDate.setDate(currentDate.getDate() + 1);
           } else if (schedule?.actualEndDate) {
-            // Se a etapa já foi concluída, usar a data real como base
+            // Etapa já concluída: usar data real como base para próxima
             currentDate = new Date(schedule.actualEndDate);
             currentDate.setDate(currentDate.getDate() + 1);
           }
@@ -327,7 +330,7 @@ export const projectService = {
   async updateStepStatus(
     projectId: number,
     scheduleId: number,
-    status: "in_progress" | "completed",
+    status: "pending" | "in_progress" | "completed",
     actualDate?: string,
   ) {
     // 1. Buscar o schedule
@@ -356,6 +359,15 @@ export const projectService = {
       throw new Error("Etapa não encontrada");
     }
 
+    const previousStatus = schedule.status;
+    const scheduleIndex = schedule.project.schedules.findIndex(
+      (item) => item.id === scheduleId,
+    );
+    const nextSchedule =
+      scheduleIndex >= 0
+        ? schedule.project.schedules[scheduleIndex + 1]
+        : undefined;
+
     // 2. Atualizar status da etapa
     const updateData: any = { status };
 
@@ -363,6 +375,12 @@ export const projectService = {
       updateData.actualStartDate = actualDate
         ? new Date(actualDate)
         : new Date();
+    }
+
+    // Desfazer conclusão: ao voltar de completed para in_progress,
+    // remover data real de fim da própria etapa
+    if (previousStatus === "completed" && status === "in_progress") {
+      updateData.actualEndDate = null;
     }
 
     if (status === "completed") {
@@ -376,6 +394,32 @@ export const projectService = {
       where: { id: scheduleId },
       data: updateData,
     });
+
+    // 2.1 Atualizar etapa seguinte automaticamente
+    if (nextSchedule) {
+      // Ao concluir uma etapa, próxima vira in_progress
+      if (status === "completed" && nextSchedule.status !== "completed") {
+        await prisma.projectStepSchedule.update({
+          where: { id: nextSchedule.id },
+          data: {
+            status: "in_progress",
+            actualStartDate: nextSchedule.actualStartDate ?? new Date(),
+          },
+        });
+      }
+
+      // Ao desfazer (completed -> in_progress), próxima volta para pending
+      if (previousStatus === "completed" && status === "in_progress") {
+        await prisma.projectStepSchedule.update({
+          where: { id: nextSchedule.id },
+          data: {
+            status: "pending",
+            actualStartDate: null,
+            actualEndDate: null,
+          },
+        });
+      }
+    }
 
     // 3. Recarregar todas as etapas do projeto após o update
     const allSchedules = await prisma.projectStepSchedule.findMany({
@@ -392,6 +436,13 @@ export const projectService = {
         where: { id: projectId },
         data: {
           status: "completed",
+        },
+      });
+    } else {
+      await prisma.project.update({
+        where: { id: projectId },
+        data: {
+          status: "in_progress",
         },
       });
     }
